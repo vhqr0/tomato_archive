@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <sstream>
 
 #include <openssl/md5.h>
 
@@ -82,15 +83,8 @@ void Object::log(int level, std::string msg, asio::error_code ec) {
 
 void Object::log(int level, std::string msg, asio::ip::tcp::endpoint endpoint) {
   std::ostringstream oss;
-  oss << msg << " @ " << endpoint;
-  log(level, oss.str());
-}
-
-void Object::log(int level, std::string msg, asio::ip::tcp::endpoint endpoint,
-                 asio::error_code ec) {
-  std::ostringstream oss;
-  oss << msg << " @ " << endpoint << " : " << asio::system_error(ec).what();
-  log(level, oss.str());
+  oss << endpoint;
+  log(level, msg + " @ " + oss.str());
 }
 
 int main(int argc, char **argv) {

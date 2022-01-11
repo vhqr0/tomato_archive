@@ -49,7 +49,6 @@ protected:
   void log(int level, std::string msg);
   void log(int level, std::string msg, asio::error_code ec);
   void log(int level, std::string msg, asio::ip::tcp::endpoint endpoint);
-  void log(int level, std::string msg, asio::ip::tcp::endpoint endpoint, asio::error_code ec);
 };
 
 class ClientSession : public Object, public std::enable_shared_from_this<ClientSession> {

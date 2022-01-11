@@ -127,7 +127,7 @@ void ServerSession::do_execute() {
     socket_.async_connect( // connect to web
       endpoint_, [this, self](asio::error_code ec) {
         if (ec) {
-          LOG_ERR("connect failed", endpoint_, ec);
+          LOG_ERR("connect failed", ec);
           return;
         }
         int length = make_response();
@@ -153,7 +153,7 @@ void ServerSession::do_execute() {
         acceptor_.bind(endpoint_);
         acceptor_.listen(1);
       } catch (asio::error_code ec) {
-        LOG_ERR("bind failed", endpoint_, ec);
+        LOG_ERR("bind failed", ec);
         return;
       }
       int length = make_response();
@@ -205,16 +205,18 @@ int ServerSession::make_response() {
     length = 10;
     in_buf_[3] = 1;
     auto addr = endpoint_.address().to_v4().to_bytes();
-    uint16_t port = htons(endpoint_.port());
+    uint16_t port = endpoint_.port();
     std::memcpy(&in_buf_[4], &addr[0], 4);
-    std::memcpy(&in_buf_[8], &port, 2);
+    in_buf_[8] = port >> 8;
+    in_buf_[9] = port & 0xff;
   } else if (endpoint_.address().is_v6()) {
     length = 22;
     in_buf_[3] = 4;
     auto addr = endpoint_.address().to_v6().to_bytes();
-    uint16_t port = htons(endpoint_.port());
+    uint16_t port = endpoint_.port();
     std::memcpy(&in_buf_[4], &addr[0], 16);
-    std::memcpy(&in_buf_[20], &port, 2);
+    in_buf_[20] = port >> 8;
+    in_buf_[21] = port & 0xff;
   } else {
     LOG_ERR("unknown endpoint type", endpoint_);
     return -1;
