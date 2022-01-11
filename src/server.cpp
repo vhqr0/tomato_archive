@@ -31,7 +31,8 @@ void ServerSession::do_handshake() {
           if (std::memcmp(&in_buf_[0], config.password, 16)) {
             LOG_MSG("handshake receive wrong password");
             stream_.async_write_some( // send index
-              asio::buffer(config.server_index), [this, self](asio::error_code ec, std::size_t length) {});
+              asio::buffer(config.server_index),
+              [this, self](asio::error_code ec, std::size_t length) {});
           } else {
             asio::async_read( // receive socks request
               stream_, asio::buffer(in_buf_, 4),
@@ -194,7 +195,7 @@ void ServerSession::do_execute() {
                   do_proxy_out();
                 });
             });
-          stream_.async_read_some(
+          stream_.async_read_some( // watch connection to cancel accept or receive
             asio::buffer(in_buf_), [this, self](asio::error_code ec, std::size_t length) {
               if (acceptor_.is_open()) {
                 if (ec) {
@@ -212,15 +213,16 @@ void ServerSession::do_execute() {
                 stream_.lowest_layer().close();
                 return;
               }
-              socket_.async_send(asio::buffer(in_buf_, length),
-                                 [this, self](asio::error_code ec, std::size_t length) {
-                                   if (ec) {
-                                     socket_.close();
-                                     stream_.lowest_layer().close();
-                                     return;
-                                   }
-                                   do_proxy_in();
-                                 });
+              socket_.async_send( // sned
+                asio::buffer(in_buf_, length),
+                [this, self](asio::error_code ec, std::size_t length) {
+                  if (ec) {
+                    socket_.close();
+                    stream_.lowest_layer().close();
+                    return;
+                  }
+                  do_proxy_in();
+                });
             });
         });
     }

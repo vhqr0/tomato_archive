@@ -29,6 +29,9 @@ public:
 
   Config();
 
+  static std::vector<asio::ip::tcp::endpoint> parse_tcp_binds(const char *binds);
+  static std::vector<asio::ip::udp::endpoint> parse_udp_binds(const char *binds);
+
 private:
   static int parse_int(const char *env, int dft);
   static std::string parse_str(const char *env, std::string dft);
@@ -54,15 +57,13 @@ public:
   ClientSession(asio::ip::tcp::socket socket, Object &object);
   ~ClientSession();
   void start();
-  void bind(uint16_t lport, uint16_t rport);
 
-private:
+protected:
   asio::ip::tcp::socket socket_;
   asio::ssl::stream<asio::ip::tcp::socket> stream_;
   std::vector<uint8_t> in_buf_, out_buf_;
   std::size_t length_;
   bool connectp_;
-  uint16_t lport_, rport_;
 
   void do_handshake();
   void do_http_handshake();
@@ -78,11 +79,6 @@ private:
   asio::ip::tcp::acceptor acceptor_;
 
   void do_accept();
-};
-
-class BindClient : public Object {
-public:
-  BindClient(Config &config, const char *binds);
 };
 
 class ServerSession : public Object, public std::enable_shared_from_this<ServerSession> {
@@ -116,6 +112,21 @@ private:
   asio::ip::tcp::acceptor acceptor_;
 
   void do_accept();
+};
+
+class BindSession : public ClientSession {
+public:
+  BindSession(asio::ip::tcp::endpoint &local, asio::ip::tcp::endpoint &remote,
+              asio::ip::tcp::socket socket, Object &object);
+  void bind();
+
+private:
+  asio::ip::tcp::endpoint &local_, &remote_;
+};
+
+class Bind : public Object {
+public:
+  Bind(Config &config, std::vector<asio::ip::tcp::endpoint> &binds);
 };
 
 #endif

@@ -48,6 +48,36 @@ asio::ip::tcp::endpoint Config::parse_endpoint(const char *env, std::string port
   return *asio::ip::tcp::resolver(io_context).resolve(host, port);
 }
 
+#define def_parse_binds(PROTO)                                                                     \
+  std::vector<asio::ip::PROTO::endpoint> Config::parse_##PROTO##_binds(const char *binds) {        \
+    std::vector<asio::ip::PROTO::endpoint> v;                                                      \
+    asio::io_context io_context;                                                                   \
+    const char *beg;                                                                               \
+    const char *end = binds + std::strlen(binds);                                                  \
+    const char *cur = binds - 1;                                                                   \
+    while (cur != end) {                                                                           \
+      beg = cur + 1;                                                                               \
+      cur = std::find(beg, end, ';');                                                              \
+      std::string host(beg, cur - beg);                                                            \
+      std::string port;                                                                            \
+      auto pos = host.find(':');                                                                   \
+      if (pos == std::string::npos) {                                                              \
+        port = std::move(host);                                                                    \
+        host = "0.0.0.0";                                                                          \
+      } else {                                                                                     \
+        port = host.substr(pos + 1);                                                               \
+        host = host.substr(0, pos);                                                                \
+      }                                                                                            \
+      if (host.empty())                                                                            \
+        host = "0.0.0.0";                                                                          \
+      v.push_back(*asio::ip::PROTO::resolver(io_context).resolve(host, port));                     \
+    }                                                                                              \
+    return v;                                                                                      \
+  }
+
+def_parse_binds(tcp);
+def_parse_binds(udp);
+
 Object::Object(Config &config) : config(config), id(0) {}
 
 Object::Object(Object &object) : config(object.config), id(object.id++) {}
@@ -80,7 +110,8 @@ int main(int argc, char **argv) {
     Server server(config);
     config.io_context.run();
   } else if (!std::strcmp(argv[1], "-b")) {
-    BindClient client(config, argc >= 3 ? argv[2] : std::getenv("TOMATO_BINDS"));
+    auto binds = Config::parse_tcp_binds(argc >= 3 ? argv[2] : std::getenv("TOMATO_BINDS"));
+    Bind client(config, binds);
     config.io_context.run();
   } else {
     std::cerr << "wrong argument" << std::endl;
