@@ -118,7 +118,7 @@ void ClientSession::do_http_handshake() {
     std::memcpy(&out_buf_[21], &*beg, length);
     length += 21;
     out_buf_[length++] = port >> 8;
-    out_buf_[length++] = port & 0xff;
+    out_buf_[length++] = port;
     if (connectp_) {
       length_ = length;
     } else {

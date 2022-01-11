@@ -23,7 +23,7 @@ void BindSession::bind() {
     uint16_t port = remote_.port();
     std::memcpy(&out_buf_[20], &addr[0], 4);
     out_buf_[24] = port >> 8;
-    out_buf_[25] = port & 0xff;
+    out_buf_[25] = port;
   } else if (remote_.address().is_v6()) {
     length_ = 38;
     out_buf_[19] = 4;
@@ -31,7 +31,7 @@ void BindSession::bind() {
     uint16_t port = remote_.port();
     std::memcpy(&out_buf_[20], &addr[0], 16);
     out_buf_[36] = port >> 8;
-    out_buf_[37] = port & 0xff;
+    out_buf_[37] = port;
   } else {
     LOG_ERR("bind tomato handshake unknown endpoint type");
     return;

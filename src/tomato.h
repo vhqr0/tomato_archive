@@ -89,10 +89,10 @@ public:
 
 private:
   asio::ip::tcp::socket socket_;
+  asio::ip::tcp::acceptor acceptor_;
   asio::ssl::stream<asio::ip::tcp::socket> stream_;
   std::vector<uint8_t> in_buf_, out_buf_;
   asio::ip::tcp::endpoint endpoint_;
-  asio::ip::tcp::acceptor acceptor_;
   asio::ip::tcp::resolver resolver_;
   std::string host_, port_;
 

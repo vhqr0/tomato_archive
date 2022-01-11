@@ -6,9 +6,9 @@
 #include <exception>
 
 ServerSession::ServerSession(asio::ip::tcp::socket socket, Object &object)
-  : Object(object), socket_(config.io_context),
-    stream_(std::move(socket), config.server_ssl_context), acceptor_(config.io_context),
-    resolver_(config.io_context), in_buf_(config.buf_size), out_buf_(config.buf_size) {}
+  : Object(object), socket_(config.io_context), acceptor_(config.io_context),
+    stream_(std::move(socket), config.server_ssl_context), resolver_(config.io_context),
+    in_buf_(config.buf_size), out_buf_(config.buf_size) {}
 
 ServerSession::~ServerSession() { LOG_MSG("session closed"); }
 
@@ -88,10 +88,6 @@ void ServerSession::do_resolve() {
           LOG_ERR("handshake receive host length failed", ec);
           return;
         }
-        if (out_buf_[0] + 2 > config.buf_size) {
-          LOG_ERR("handshake receive host too long");
-          return;
-        }
         asio::async_read( // receive host
           stream_, asio::buffer(out_buf_, out_buf_[0] + 2),
           [this, self](asio::error_code ec, std::size_t length) {
@@ -101,7 +97,7 @@ void ServerSession::do_resolve() {
             }
             host_ = std::string((char *)&out_buf_[0], length - 2);
             port_ = std::to_string((out_buf_[length - 2] << 8) + out_buf_[length - 1]);
-            LOG_MSG("handshake receive address: " + host_ + ":" + port_);
+            LOG_MSG("handshake receive host: " + host_ + ":" + port_);
             resolver_.async_resolve( // reslove host
               host_, port_,
               [this, self](asio::error_code ec, asio::ip::tcp::resolver::iterator it) {
@@ -137,7 +133,7 @@ void ServerSession::do_execute() {
         stream_.async_write_some( // send response
           asio::buffer(in_buf_, length), [this, self](asio::error_code ec, std::size_t length) {
             if (ec) {
-              LOG_ERR("handshake send response failed", ec);
+              LOG_ERR("handshake send failed", ec);
               return;
             }
             do_proxy_in();
@@ -146,7 +142,7 @@ void ServerSession::do_execute() {
       });
     break;
   case 2:
-    LOG_MSG("bind", endpoint_);
+    LOG_MSG("bind to", endpoint_);
     {
       try {
         acceptor_.open(endpoint_.protocol());
@@ -157,20 +153,22 @@ void ServerSession::do_execute() {
         LOG_ERR("bind failed", error.code());
         return;
       }
+      endpoint_ = acceptor_.local_endpoint();
+      LOG_MSG("bind listen", endpoint_);
       int length = make_response();
       if (length < 0)
         return;
       stream_.async_write_some( // send response
         asio::buffer(in_buf_, length), [this, self](asio::error_code ec, std::size_t length) {
           if (ec) {
-            LOG_ERR("handshake send response failed", ec);
+            LOG_ERR("handshake send failed", ec);
             return;
           }
           acceptor_.async_accept( // accept
             socket_, [this, self](asio::error_code ec) {
               acceptor_.close();
               if (ec) {
-                LOG_ERR("accept failed", ec);
+                LOG_ERR("bind accept failed", ec);
                 socket_.close();
                 stream_.lowest_layer().close();
                 return;
@@ -187,7 +185,7 @@ void ServerSession::do_execute() {
                 asio::buffer(in_buf_, length),
                 [this, self](asio::error_code ec, std::size_t length) {
                   if (ec) {
-                    LOG_ERR("handshake send response failed", ec);
+                    LOG_ERR("handshake send failed", ec);
                     socket_.close();
                     stream_.lowest_layer().close();
                     return;
@@ -244,7 +242,7 @@ int ServerSession::make_response() {
     uint16_t port = endpoint_.port();
     std::memcpy(&in_buf_[4], &addr[0], 4);
     in_buf_[8] = port >> 8;
-    in_buf_[9] = port & 0xff;
+    in_buf_[9] = port;
   } else if (endpoint_.address().is_v6()) {
     length = 22;
     in_buf_[3] = 4;
@@ -252,9 +250,9 @@ int ServerSession::make_response() {
     uint16_t port = endpoint_.port();
     std::memcpy(&in_buf_[4], &addr[0], 16);
     in_buf_[20] = port >> 8;
-    in_buf_[21] = port & 0xff;
+    in_buf_[21] = port;
   } else {
-    LOG_ERR("unknown endpoint type", endpoint_);
+    LOG_ERR("handshake send unknown endpoint type", endpoint_);
     return -1;
   }
   return length;
