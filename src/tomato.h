@@ -67,7 +67,6 @@ private:
   uint16_t lport_, rport_;
 
   void do_handshake();
-  void do_tomato_handshake();
   void do_http_handshake();
   void do_proxy_in();
   void do_proxy_out();

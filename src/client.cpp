@@ -43,34 +43,29 @@ void ClientSession::do_handshake() {
             LOG_ERR("socks handshake send failed", ec);
             return;
           }
-          do_tomato_handshake();
-        });
-    });
-}
-
-void ClientSession::do_tomato_handshake() {
-  auto self(shared_from_this());
-  stream_.lowest_layer().async_connect( // connect
-    config.client_remote, [this, self](asio::error_code ec) {
-      if (ec) {
-        LOG_ERR("tomato handshake connect failed", ec);
-        return;
-      }
-      stream_.async_handshake( // tls handshake
-        stream_.client, [this, self](asio::error_code ec) {
-          if (ec) {
-            LOG_ERR("tomato handshake tls handshake failed", ec);
-            return;
-          }
-          stream_.async_write_some( // send password
-            asio::buffer(config.password, 16),
-            [this, self](asio::error_code ec, std::size_t length) {
+          stream_.lowest_layer().async_connect( // connect
+            config.client_remote, [this, self](asio::error_code ec) {
               if (ec) {
-                LOG_ERR("tomato handshake send failed", ec);
+                LOG_ERR("tomato handshake connect failed", ec);
                 return;
               }
-              do_proxy_in();
-              do_proxy_out();
+              stream_.async_handshake( // tls handshake
+                stream_.client, [this, self](asio::error_code ec) {
+                  if (ec) {
+                    LOG_ERR("tomato handshake tls handshake failed", ec);
+                    return;
+                  }
+                  stream_.async_write_some( // send password
+                    asio::buffer(config.password, 16),
+                    [this, self](asio::error_code ec, std::size_t length) {
+                      if (ec) {
+                        LOG_ERR("tomato handshake send failed", ec);
+                        return;
+                      }
+                      do_proxy_in();
+                      do_proxy_out();
+                    });
+                });
             });
         });
     });
