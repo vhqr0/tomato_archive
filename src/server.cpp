@@ -31,7 +31,7 @@ void ServerSession::do_handshake() {
           if (std::memcmp(&in_buf_[0], config.password, 16)) {
             LOG_MSG("handshake receive wrong password");
             stream_.async_write_some( // send index
-              asio::buffer(config.index), [this, self](asio::error_code ec, std::size_t length) {});
+              asio::buffer(config.server_index), [this, self](asio::error_code ec, std::size_t length) {});
           } else {
             asio::async_read( // receive socks request
               stream_, asio::buffer(in_buf_, 4),

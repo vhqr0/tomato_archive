@@ -369,12 +369,6 @@ void ClientSession::do_proxy_out() {
 Client::Client(Config &config) : Object(config), acceptor_(config.io_context, config.client_local) {
   LOG_MSG("client local", config.client_local);
   LOG_MSG("client remote", config.client_remote);
-  int cur = 0;
-  while (cur + 1 < config.binds.size()) {
-    std::make_shared<ClientSession>(asio::ip::tcp::socket(config.io_context), *this)
-      ->bind(config.binds[cur], config.binds[cur + 1]);
-    cur += 2;
-  }
   do_accept();
 }
 
@@ -389,4 +383,25 @@ void Client::do_accept() {
       }
       do_accept();
     });
+}
+
+BindClient::BindClient(Config &config, const char *binds) : Object(config) {
+  if (!binds) {
+    LOG_ERR("no binds found");
+    return;
+  }
+  LOG_MSG("bind remote", config.client_remote);
+  std::vector<uint16_t> v;
+  const char *beg = binds;
+  const char *end = binds + std::strlen(binds);
+  const char *cur = std::find(beg, end, ',');
+  v.push_back(std::stoi(std::string(beg, cur - beg)));
+  while (cur != end) {
+    beg = cur + 1;
+    cur = std::find(beg, end, ',');
+    v.push_back(std::stoi(std::string(beg, cur - beg)));
+  }
+  for (int i = 0; i + 1 < v.size(); i += 2)
+    std::make_shared<ClientSession>(asio::ip::tcp::socket(config.io_context), *this)
+      ->bind(v[i], v[i + 1]);
 }

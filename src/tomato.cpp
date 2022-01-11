@@ -14,11 +14,10 @@ Config::Config()
   buf_size = parse_int("TOMATO_BUF_SIZE", 4096);
   std::string pwd = parse_str("TOMATO_PASSWORD", "password");
   MD5((const unsigned char *)pwd.c_str(), pwd.length(), password);
-  client_local = parse_endpoint("TOMATO_CLIENT_LOCAL", 1080);
-  client_remote = parse_endpoint("TOMATO_CLIENT_REMOTE", 4433);
-  server_local = parse_endpoint("TOMATO_SERVER_LOCAL", 4433);
-  binds = parse_ints("TOMATO_BINDS");
-  index = "HTTP/1.1 200 OK\r\n\r\n" + parse_str("TOMATO_SERVER_INDEX", "<p>hello world</p>");
+  client_local = parse_endpoint("TOMATO_CLIENT_LOCAL", "1080");
+  client_remote = parse_endpoint("TOMATO_CLIENT_REMOTE", "4433");
+  server_local = parse_endpoint("TOMATO_SERVER_LOCAL", "4433");
+  server_index = "HTTP/1.1 200 OK\r\n\r\n" + parse_str("TOMATO_SERVER_INDEX", "<p>hello world</p>");
   client_ssl_context.set_verify_mode(asio::ssl::verify_peer);
   client_ssl_context.load_verify_file(parse_str("TOMATO_CA", "crt/ca.crt"));
   server_ssl_context.set_verify_mode(asio::ssl::verify_peer);
@@ -38,34 +37,15 @@ std::string Config::parse_str(const char *env, std::string dft) {
   return val ? std::string(val) : dft;
 }
 
-std::vector<int> Config::parse_ints(const char *env) {
-  const char *val = std::getenv(env);
-  std::vector<int> v;
-  if (val) {
-    const char *beg = val;
-    const char *end = val + std::strlen(val);
-    const char *cur = std::find(beg, end, ',');
-    v.push_back(std::stoi(std::string(beg, cur - beg)));
-    while (cur != end) {
-      beg = cur + 1;
-      cur = std::find(beg, end, ',');
-      v.push_back(std::stoi(std::string(beg, cur - beg)));
-    }
-  }
-  return std::move(v);
-}
-
-asio::ip::tcp::endpoint Config::parse_endpoint(const char *env, uint16_t dport) {
+asio::ip::tcp::endpoint Config::parse_endpoint(const char *env, std::string port) {
   std::string host = parse_str(env, "0.0.0.0");
-  uint16_t port;
   auto pos = host.find(':');
-  if (pos == std::string::npos) {
-    port = dport;
-  } else {
-    port = std::stoi(host.substr(pos + 1));
+  if (pos != std::string::npos) {
+    port = host.substr(pos + 1);
     host = host.substr(0, pos);
   }
-  return asio::ip::tcp::endpoint(asio::ip::address::from_string(host), port);
+  asio::io_context io_context;
+  return *asio::ip::tcp::resolver(io_context).resolve(host, port);
 }
 
 Object::Object(Config &config) : config(config), id(0) {}
@@ -89,7 +69,7 @@ void Object::log(int level, std::string msg, asio::ip::tcp::endpoint endpoint) {
 
 int main(int argc, char **argv) {
   Config config;
-  if (argc != 2) {
+  if (argc < 2) {
     std::cerr << "wrong argument" << std::endl;
     return -1;
   }
@@ -98,6 +78,9 @@ int main(int argc, char **argv) {
     config.io_context.run();
   } else if (!std::strcmp(argv[1], "-s")) {
     Server server(config);
+    config.io_context.run();
+  } else if (!std::strcmp(argv[1], "-b")) {
+    BindClient client(config, argc >= 3 ? argv[2] : std::getenv("TOMATO_BINDS"));
     config.io_context.run();
   } else {
     std::cerr << "wrong argument" << std::endl;

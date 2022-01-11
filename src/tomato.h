@@ -25,16 +25,14 @@ public:
   uint8_t password[16];
   asio::ssl::context client_ssl_context, server_ssl_context;
   asio::ip::tcp::endpoint client_local, client_remote, server_local;
-  std::vector<int> binds;
-  std::string index;
+  std::string server_index;
 
   Config();
 
 private:
   static int parse_int(const char *env, int dft);
   static std::string parse_str(const char *env, std::string dft);
-  static std::vector<int> parse_ints(const char *env);
-  static asio::ip::tcp::endpoint parse_endpoint(const char *env, uint16_t dport);
+  static asio::ip::tcp::endpoint parse_endpoint(const char *env, std::string port);
 };
 
 class Object {
@@ -80,6 +78,11 @@ private:
   asio::ip::tcp::acceptor acceptor_;
 
   void do_accept();
+};
+
+class BindClient : public Object {
+public:
+  BindClient(Config &config, const char *binds);
 };
 
 class ServerSession : public Object, public std::enable_shared_from_this<ServerSession> {
