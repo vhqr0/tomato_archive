@@ -145,15 +145,15 @@ void ServerSession::do_execute() {
       });
     break;
   case 2:
-    LOG_MSG("bind to", endpoint_);
+    LOG_MSG("bind", endpoint_);
     {
       try {
         acceptor_.open(endpoint_.protocol());
         acceptor_.set_option(asio::ip::tcp::acceptor::reuse_address(true));
         acceptor_.bind(endpoint_);
         acceptor_.listen(1);
-      } catch (asio::error_code ec) {
-        LOG_ERR("bind failed", ec);
+      } catch (asio::system_error error) {
+        LOG_ERR("bind failed", error.code());
         return;
       }
       int length = make_response();
@@ -167,26 +167,60 @@ void ServerSession::do_execute() {
           }
           acceptor_.async_accept( // accept
             socket_, [this, self](asio::error_code ec) {
+              acceptor_.close();
               if (ec) {
                 LOG_ERR("accept failed", ec);
+                socket_.close();
+                stream_.lowest_layer().close();
                 return;
               }
-              acceptor_.close();
               endpoint_ = socket_.remote_endpoint();
               LOG_MSG("bind accept", endpoint_);
               int length = make_response();
-              if (length < 0)
+              if (length < 0) {
+                socket_.close();
+                stream_.lowest_layer().close();
                 return;
+              }
               stream_.async_write_some( // send response
                 asio::buffer(in_buf_, length),
                 [this, self](asio::error_code ec, std::size_t length) {
                   if (ec) {
                     LOG_ERR("handshake send response failed", ec);
+                    socket_.close();
+                    stream_.lowest_layer().close();
                     return;
                   }
-                  do_proxy_in();
                   do_proxy_out();
                 });
+            });
+          stream_.async_read_some(
+            asio::buffer(in_buf_), [this, self](asio::error_code ec, std::size_t length) {
+              if (acceptor_.is_open()) {
+                if (ec) {
+                  LOG_ERR("bind canceled for error", ec);
+                } else {
+                  LOG_ERR("bind canceled for receive");
+                }
+                acceptor_.cancel();
+                socket_.close();
+                stream_.lowest_layer().close();
+                return;
+              }
+              if (ec) {
+                socket_.close();
+                stream_.lowest_layer().close();
+                return;
+              }
+              socket_.async_send(asio::buffer(in_buf_, length),
+                                 [this, self](asio::error_code ec, std::size_t length) {
+                                   if (ec) {
+                                     socket_.close();
+                                     stream_.lowest_layer().close();
+                                     return;
+                                   }
+                                   do_proxy_in();
+                                 });
             });
         });
     }
