@@ -15,7 +15,9 @@ BindSession::BindSession(asio::ip::tcp::endpoint &local, asio::ip::tcp::endpoint
     stream_(config.io_context, config.client_ssl_context), in_buf_(config.buf_size),
     out_buf_(config.buf_size), local_(local), remote_(remote) {}
 
-void BindSession::bind() {
+BindSession::~BindSession() { LOG_MSG("session closed"); }
+
+void BindSession::start() {
   LOG_MSG("bind", local_, remote_);
   std::memcpy(&out_buf_[0], config.password, 16);
   out_buf_[16] = 5;
@@ -38,37 +40,37 @@ void BindSession::bind() {
     out_buf_[36] = port >> 8;
     out_buf_[37] = port;
   } else {
-    LOG_ERR("bind tomato handshake unknown endpoint type");
+    LOG_ERR("unknown endpoint type");
     return;
   }
   auto self(shared_from_this());
   stream_.lowest_layer().async_connect( // connect
     config.client_remote, [this, self](asio::error_code ec) {
       if (ec) {
-        LOG_ERR("bind tomato handshake connect failed", ec);
+        LOG_ERR("connect failed", ec);
         return;
       }
       stream_.async_handshake( // tls handshake
         stream_.client, [this, self](asio::error_code ec) {
           if (ec) {
-            LOG_ERR("bind tomato handshake tls handshake failed", ec);
+            LOG_ERR("tls handshake failed", ec);
             return;
           }
-          stream_.async_write_some( // send password and socks request
+          stream_.async_write_some( // send password and request
             asio::buffer(out_buf_, length_), [this, self](asio::error_code ec, std::size_t length) {
               if (ec) {
-                LOG_ERR("bind tomato handshake send failed", ec);
+                LOG_ERR("send failed", ec);
                 return;
               }
-              asio::async_read( // receive socks response 1
+              asio::async_read( // receive response 1
                 stream_, asio::buffer(out_buf_, 4),
                 [this, self](asio::error_code ec, std::size_t length) {
                   if (ec) {
-                    LOG_ERR("bind tomato handshake receive failed", ec);
+                    LOG_ERR("receive failed", ec);
                     return;
                   }
                   if (out_buf_[0] != 5 || out_buf_[1] != 0) {
-                    LOG_ERR("bind tomato handshake invalid data");
+                    LOG_ERR("invalid data");
                     return;
                   }
                   switch (out_buf_[3]) {
@@ -79,25 +81,25 @@ void BindSession::bind() {
                     length = 18;
                     break;
                   default:
-                    LOG_ERR("bind tomato handshake unknown endpoint type");
+                    LOG_ERR("unknown endpoint type");
                     return;
                   }
-                  asio::async_read( // receive socks response 2
+                  asio::async_read( // receive response 2
                     stream_, asio::buffer(out_buf_, length),
                     [this, self](asio::error_code ec, std::size_t length) {
                       if (ec) {
-                        LOG_ERR("bind tomato handshake receive failed", ec);
+                        LOG_ERR("receive failed", ec);
                         return;
                       }
-                      asio::async_read( // receive socks response 1
+                      asio::async_read( // receive response 1
                         stream_, asio::buffer(out_buf_, 4),
                         [this, self](asio::error_code ec, std::size_t length) {
                           if (ec) {
-                            LOG_ERR("bind tomato handshake receive failed", ec);
+                            LOG_ERR("receive failed", ec);
                             return;
                           }
                           if (out_buf_[0] != 5 || out_buf_[1] != 0) {
-                            LOG_ERR("bind tomato handshake invalid data");
+                            LOG_ERR("invalid data");
                             return;
                           }
                           switch (out_buf_[3]) {
@@ -108,21 +110,21 @@ void BindSession::bind() {
                             length = 18;
                             break;
                           default:
-                            LOG_ERR("bind tomato handshake unknown endpoint type");
+                            LOG_ERR("unknown endpoint type");
                             return;
                           }
-                          asio::async_read( // receive socks response 2
+                          asio::async_read( // receive response 2
                             stream_, asio::buffer(out_buf_, length),
                             [this, self](asio::error_code ec, std::size_t length) {
                               if (ec) {
-                                LOG_ERR("bind tomato handshake receive failed", ec);
+                                LOG_ERR("receive failed", ec);
                                 return;
                               }
                               socket_.async_connect( // connect
                                 local_, [this, self](asio::error_code ec) {
-                                  std::make_shared<BindSession>(local_, remote_, *this)->bind();
+                                  std::make_shared<BindSession>(local_, remote_, *this)->start();
                                   if (ec) {
-                                    LOG_ERR("bind tomato handshake connect failed", ec);
+                                    LOG_ERR("connect failed", ec);
                                     return;
                                   }
                                   do_proxy_in();
@@ -180,7 +182,7 @@ void BindSession::do_proxy_out() {
 }
 
 Bind::Bind(Config &config) : Object(config) {
-  LOG_MSG("bind remote", config.client_remote);
+  LOG_MSG("bind", config.client_remote);
   for (int i = 0; i + 1 < config.binds.size(); i += 2)
-    std::make_shared<BindSession>(config.binds[i], config.binds[i + 1], *this)->bind();
+    std::make_shared<BindSession>(config.binds[i], config.binds[i + 1], *this)->start();
 }

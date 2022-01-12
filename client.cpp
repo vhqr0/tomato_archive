@@ -22,7 +22,7 @@ void ClientSession::start() { do_handshake(); }
 
 void ClientSession::do_handshake() {
   auto self(shared_from_this());
-  socket_.async_receive( // receive handshake from browser
+  socket_.async_receive( // receive request
     asio::buffer(in_buf_), [this, self](asio::error_code ec, std::size_t length) {
       if (ec || !length) {
         LOG_ERR("socks handshake receive failed", ec);
@@ -43,7 +43,7 @@ void ClientSession::do_handshake() {
         LOG_ERR("socks handshake unsupported auth failed");
         return;
       }
-      socket_.async_send( // send response to browser
+      socket_.async_send( // send response
         asio::buffer("\x05\x00", 2), [this, self](asio::error_code ec, std::size_t length) {
           if (ec) {
             LOG_ERR("socks handshake send failed", ec);
@@ -148,13 +148,13 @@ void ClientSession::do_http_handshake() {
             LOG_ERR("http tomato handshake tls handshake failed", ec);
             return;
           }
-          stream_.async_write_some( // send password and socks request
+          stream_.async_write_some( // send password and request
             asio::buffer(out_buf_, length_), [this, self](asio::error_code ec, std::size_t length) {
               if (ec) {
                 LOG_ERR("http tomato handshake send failed", ec);
                 return;
               }
-              asio::async_read( // receive socks response 1
+              asio::async_read( // receive response 1
                 stream_, asio::buffer(out_buf_, 4),
                 [this, self](asio::error_code ec, std::size_t length) {
                   if (ec) {
@@ -176,7 +176,7 @@ void ClientSession::do_http_handshake() {
                     LOG_ERR("http tomato handshake unknown endpoint type");
                     return;
                   }
-                  asio::async_read( // receive socks response 2
+                  asio::async_read( // receive response 2
                     stream_, asio::buffer(out_buf_, length),
                     [this, self](asio::error_code ec, std::size_t length) {
                       if (ec) {
@@ -184,7 +184,7 @@ void ClientSession::do_http_handshake() {
                         return;
                       }
                       if (connectp_) {
-                        socket_.async_send( // send response to browser
+                        socket_.async_send( // send response
                           asio::buffer("HTTP/1.1 200 Connection Established\r\n\r\n", 39),
                           [this, self](asio::error_code ec, std::size_t length) {
                             if (ec) {
@@ -253,7 +253,7 @@ Client::Client(Config &config) : Object(config), acceptor_(config.io_context, co
 }
 
 void Client::do_accept() {
-  acceptor_.async_accept( // accept from browser
+  acceptor_.async_accept( // accept
     [this](asio::error_code ec, asio::ip::tcp::socket socket) {
       if (ec) {
         LOG_ERR("accept failed", ec);

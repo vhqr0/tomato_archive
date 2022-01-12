@@ -32,6 +32,7 @@ Config::Config()
   server_ssl_context.use_private_key_file(parse_str("TOMATO_KEY", "crt/server.key"),
                                           asio::ssl::context::pem);
   parse_binds();
+  parse_ubinds();
 }
 
 int Config::parse_int(const char *env, int dft) {
@@ -53,6 +54,17 @@ asio::ip::tcp::endpoint Config::parse_endpoint(const char *env, std::string port
   }
   asio::io_context io_context;
   return *asio::ip::tcp::resolver(io_context).resolve(host, port);
+}
+
+asio::ip::udp::endpoint Config::parse_uendpoint(const char *env, std::string port) {
+  std::string host = parse_str(env, "0.0.0.0");
+  auto pos = host.find(':');
+  if (pos != std::string::npos) {
+    port = host.substr(pos + 1);
+    host = host.substr(0, pos);
+  }
+  asio::io_context io_context;
+  return *asio::ip::udp::resolver(io_context).resolve(host, port);
 }
 
 void Config::parse_binds() {
@@ -80,6 +92,31 @@ void Config::parse_binds() {
   }
 }
 
+void Config::parse_ubinds() {
+  const char *beg, *end, *cur;
+  if (!(beg = std::getenv("TOMATO_UBINDS")))
+    return;
+  end = beg + std::strlen(beg);
+  cur = beg - 1;
+  while (cur != end) {
+    beg = cur + 1;
+    cur = std::find(beg, end, ';');
+    std::string host(beg, cur - beg);
+    std::string port;
+    auto pos = host.find(':');
+    if (pos == std::string::npos) {
+      port = std::move(host);
+      host = "0.0.0.0";
+    } else {
+      port = host.substr(pos + 1);
+      host = host.substr(0, pos);
+    }
+    if (host.empty())
+      host = "0.0.0.0";
+    ubinds.push_back(*asio::ip::udp::resolver(io_context).resolve(host, port));
+  }
+}
+
 Object::Object(Config &config) : config(config), id(0) {}
 
 Object::Object(Object &object) : config(object.config), id(object.id++) {}
@@ -99,8 +136,21 @@ void Object::log(int level, std::string msg, asio::ip::tcp::endpoint endpoint) {
   log(level, msg + " @ " + oss.str());
 }
 
+void Object::log(int level, std::string msg, asio::ip::udp::endpoint endpoint) {
+  std::ostringstream oss;
+  oss << endpoint;
+  log(level, msg + " @ " + oss.str());
+}
+
 void Object::log(int level, std::string msg, asio::ip::tcp::endpoint local,
                  asio::ip::tcp::endpoint remote) {
+  std::ostringstream oss;
+  oss << local << " -> " << remote;
+  log(level, msg + " @ " + oss.str());
+}
+
+void Object::log(int level, std::string msg, asio::ip::udp::endpoint local,
+                 asio::ip::udp::endpoint remote) {
   std::ostringstream oss;
   oss << local << " -> " << remote;
   log(level, msg + " @ " + oss.str());
@@ -120,6 +170,9 @@ int main(int argc, char **argv) {
     config.io_context.run();
   } else if (!std::strcmp(argv[1], "-b")) {
     Bind bind(config);
+    config.io_context.run();
+  } else if (!std::strcmp(argv[1], "-u")) {
+    UBind ubind(config);
     config.io_context.run();
   } else {
     std::cerr << "wrong argument" << std::endl;
