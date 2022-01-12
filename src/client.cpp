@@ -4,6 +4,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <memory>
+#include <string>
+
+#include <asio.hpp>
 
 ClientSession::ClientSession(asio::ip::tcp::socket socket, Object &object)
   : Object(object), socket_(std::move(socket)),
@@ -242,8 +246,7 @@ void ClientSession::do_proxy_out() {
 }
 
 Client::Client(Config &config) : Object(config), acceptor_(config.io_context, config.client_local) {
-  LOG_MSG("client local", config.client_local);
-  LOG_MSG("client remote", config.client_remote);
+  LOG_MSG("client", config.client_local, config.client_remote);
   do_accept();
 }
 

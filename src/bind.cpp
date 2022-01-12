@@ -3,15 +3,16 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
-#include <exception>
+#include <memory>
+
+#include <asio.hpp>
 
 BindSession::BindSession(asio::ip::tcp::endpoint &local, asio::ip::tcp::endpoint &remote,
                          asio::ip::tcp::socket socket, Object &object)
   : ClientSession(std::move(socket), object), local_(local), remote_(remote) {}
 
 void BindSession::bind() {
-  LOG_MSG("bind local", local_);
-  LOG_MSG("bind remote", remote_);
+  LOG_MSG("bind", local_, remote_);
   std::memcpy(&out_buf_[0], config.password, 16);
   out_buf_[16] = 5;
   out_buf_[17] = 2;
@@ -135,10 +136,10 @@ void BindSession::bind() {
     });
 }
 
-Bind::Bind(Config &config, std::vector<asio::ip::tcp::endpoint> &binds) : Object(config) {
+Bind::Bind(Config &config) : Object(config) {
   LOG_MSG("bind remote", config.client_remote);
-  for (int i = 0; i + 1 < binds.size(); i += 2)
-    std::make_shared<BindSession>(binds[i], binds[i + 1], asio::ip::tcp::socket(config.io_context),
-                                  *this)
+  for (int i = 0; i + 1 < config.binds.size(); i += 2)
+    std::make_shared<BindSession>(config.binds[i], config.binds[i + 1],
+                                  asio::ip::tcp::socket(config.io_context), *this)
       ->bind();
 }

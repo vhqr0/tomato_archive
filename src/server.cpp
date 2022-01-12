@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
-#include <exception>
+#include <memory>
+#include <string>
+
+#include <asio.hpp>
 
 ServerSession::ServerSession(asio::ip::tcp::socket socket, Object &object)
   : Object(object), socket_(config.io_context), acceptor_(config.io_context),

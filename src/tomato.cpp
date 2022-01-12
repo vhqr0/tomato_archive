@@ -5,6 +5,10 @@
 #include <cstring>
 #include <iostream>
 #include <sstream>
+#include <string>
+
+#include <asio.hpp>
+#include <asio/ssl.hpp>
 
 #include <openssl/md5.h>
 
@@ -25,6 +29,7 @@ Config::Config()
                                           asio::ssl::context::pem);
   server_ssl_context.use_private_key_file(parse_str("TOMATO_KEY", "crt/server.key"),
                                           asio::ssl::context::pem);
+  parse_binds();
 }
 
 int Config::parse_int(const char *env, int dft) {
@@ -48,35 +53,30 @@ asio::ip::tcp::endpoint Config::parse_endpoint(const char *env, std::string port
   return *asio::ip::tcp::resolver(io_context).resolve(host, port);
 }
 
-#define def_parse_binds(PROTO)                                                                     \
-  std::vector<asio::ip::PROTO::endpoint> Config::parse_##PROTO##_binds(const char *binds) {        \
-    std::vector<asio::ip::PROTO::endpoint> v;                                                      \
-    asio::io_context io_context;                                                                   \
-    const char *beg;                                                                               \
-    const char *end = binds + std::strlen(binds);                                                  \
-    const char *cur = binds - 1;                                                                   \
-    while (cur != end) {                                                                           \
-      beg = cur + 1;                                                                               \
-      cur = std::find(beg, end, ';');                                                              \
-      std::string host(beg, cur - beg);                                                            \
-      std::string port;                                                                            \
-      auto pos = host.find(':');                                                                   \
-      if (pos == std::string::npos) {                                                              \
-        port = std::move(host);                                                                    \
-        host = "0.0.0.0";                                                                          \
-      } else {                                                                                     \
-        port = host.substr(pos + 1);                                                               \
-        host = host.substr(0, pos);                                                                \
-      }                                                                                            \
-      if (host.empty())                                                                            \
-        host = "0.0.0.0";                                                                          \
-      v.push_back(*asio::ip::PROTO::resolver(io_context).resolve(host, port));                     \
-    }                                                                                              \
-    return v;                                                                                      \
+void Config::parse_binds() {
+  const char *beg, *end, *cur;
+  if (!(beg = std::getenv("TOMATO_BINDS")))
+    return;
+  end = beg + std::strlen(beg);
+  cur = beg - 1;
+  while (cur != end) {
+    beg = cur + 1;
+    cur = std::find(beg, end, ';');
+    std::string host(beg, cur - beg);
+    std::string port;
+    auto pos = host.find(':');
+    if (pos == std::string::npos) {
+      port = std::move(host);
+      host = "0.0.0.0";
+    } else {
+      port = host.substr(pos + 1);
+      host = host.substr(0, pos);
+    }
+    if (host.empty())
+      host = "0.0.0.0";
+    binds.push_back(*asio::ip::tcp::resolver(io_context).resolve(host, port));
   }
-
-def_parse_binds(tcp);
-def_parse_binds(udp);
+}
 
 Object::Object(Config &config) : config(config), id(0) {}
 
@@ -97,6 +97,12 @@ void Object::log(int level, std::string msg, asio::ip::tcp::endpoint endpoint) {
   log(level, msg + " @ " + oss.str());
 }
 
+void Object::log(int level, std::string msg, asio::ip::tcp::endpoint local, asio::ip::tcp::endpoint remote) {
+  std::ostringstream oss;
+  oss << local << " -> " << remote;
+  log(level, msg + " @ " + oss.str());
+}
+
 int main(int argc, char **argv) {
   Config config;
   if (argc < 2) {
@@ -110,8 +116,7 @@ int main(int argc, char **argv) {
     Server server(config);
     config.io_context.run();
   } else if (!std::strcmp(argv[1], "-b")) {
-    auto binds = Config::parse_tcp_binds(argc >= 3 ? argv[2] : std::getenv("TOMATO_BINDS"));
-    Bind client(config, binds);
+    Bind bind(config);
     config.io_context.run();
   } else {
     std::cerr << "wrong argument" << std::endl;

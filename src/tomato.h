@@ -26,16 +26,16 @@ public:
   asio::ssl::context client_ssl_context, server_ssl_context;
   asio::ip::tcp::endpoint client_local, client_remote, server_local;
   std::string server_index;
+  std::vector<asio::ip::tcp::endpoint> binds;
 
   Config();
-
-  static std::vector<asio::ip::tcp::endpoint> parse_tcp_binds(const char *binds);
-  static std::vector<asio::ip::udp::endpoint> parse_udp_binds(const char *binds);
 
 private:
   static int parse_int(const char *env, int dft);
   static std::string parse_str(const char *env, std::string dft);
   static asio::ip::tcp::endpoint parse_endpoint(const char *env, std::string port);
+
+  void parse_binds();
 };
 
 class Object {
@@ -50,6 +50,8 @@ protected:
   void log(int level, std::string msg);
   void log(int level, std::string msg, asio::error_code ec);
   void log(int level, std::string msg, asio::ip::tcp::endpoint endpoint);
+  void log(int level, std::string msg, asio::ip::tcp::endpoint local,
+           asio::ip::tcp::endpoint remote);
 };
 
 class ClientSession : public Object, public std::enable_shared_from_this<ClientSession> {
@@ -126,7 +128,7 @@ private:
 
 class Bind : public Object {
 public:
-  Bind(Config &config, std::vector<asio::ip::tcp::endpoint> &binds);
+  Bind(Config &config);
 };
 
 #endif
