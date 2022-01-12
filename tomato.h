@@ -60,7 +60,7 @@ public:
   ~ClientSession();
   void start();
 
-protected:
+private:
   asio::ip::tcp::socket socket_;
   asio::ssl::stream<asio::ip::tcp::socket> stream_;
   std::vector<uint8_t> in_buf_, out_buf_;
@@ -116,14 +116,20 @@ private:
   void do_accept();
 };
 
-class BindSession : public ClientSession {
+class BindSession : public Object, public std::enable_shared_from_this<BindSession> {
 public:
-  BindSession(asio::ip::tcp::endpoint &local, asio::ip::tcp::endpoint &remote,
-              asio::ip::tcp::socket socket, Object &object);
+  BindSession(asio::ip::tcp::endpoint &local, asio::ip::tcp::endpoint &remote, Object &object);
   void bind();
 
 private:
+  asio::ip::tcp::socket socket_;
+  asio::ssl::stream<asio::ip::tcp::socket> stream_;
+  std::vector<uint8_t> in_buf_, out_buf_;
+  std::size_t length_;
   asio::ip::tcp::endpoint &local_, &remote_;
+
+  void do_proxy_in();
+  void do_proxy_out();
 };
 
 class Bind : public Object {

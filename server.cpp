@@ -1,5 +1,7 @@
 #include "tomato.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>

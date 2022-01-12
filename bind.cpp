@@ -1,5 +1,7 @@
 #include "tomato.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -8,8 +10,10 @@
 #include <asio.hpp>
 
 BindSession::BindSession(asio::ip::tcp::endpoint &local, asio::ip::tcp::endpoint &remote,
-                         asio::ip::tcp::socket socket, Object &object)
-  : ClientSession(std::move(socket), object), local_(local), remote_(remote) {}
+                         Object &object)
+  : Object(object), socket_(config.io_context),
+    stream_(config.io_context, config.client_ssl_context), in_buf_(config.buf_size),
+    out_buf_(config.buf_size), local_(local), remote_(remote) {}
 
 void BindSession::bind() {
   LOG_MSG("bind", local_, remote_);
@@ -116,10 +120,7 @@ void BindSession::bind() {
                               }
                               socket_.async_connect( // connect
                                 local_, [this, self](asio::error_code ec) {
-                                  std::make_shared<BindSession>(
-                                    local_, remote_, asio::ip::tcp::socket(config.io_context),
-                                    *this)
-                                    ->bind();
+                                  std::make_shared<BindSession>(local_, remote_, *this)->bind();
                                   if (ec) {
                                     LOG_ERR("bind tomato handshake connect failed", ec);
                                     return;
@@ -136,10 +137,50 @@ void BindSession::bind() {
     });
 }
 
+void BindSession::do_proxy_in() {
+  auto self(shared_from_this());
+  socket_.async_receive( // receive
+    asio::buffer(in_buf_), [this, self](asio::error_code ec, std::size_t length) {
+      if (ec) {
+        socket_.close();
+        stream_.lowest_layer().close();
+        return;
+      }
+      stream_.async_write_some( // send
+        asio::buffer(in_buf_, length), [this, self](asio::error_code ec, std::size_t length) {
+          if (ec) {
+            socket_.close();
+            stream_.lowest_layer().close();
+            return;
+          }
+          do_proxy_in();
+        });
+    });
+}
+
+void BindSession::do_proxy_out() {
+  auto self(shared_from_this());
+  stream_.async_read_some( // receive
+    asio::buffer(out_buf_), [this, self](asio::error_code ec, std::size_t length) {
+      if (ec) {
+        socket_.close();
+        stream_.lowest_layer().close();
+        return;
+      }
+      socket_.async_send( // send
+        asio::buffer(out_buf_, length), [this, self](asio::error_code ec, std::size_t length) {
+          if (ec) {
+            socket_.close();
+            stream_.lowest_layer().close();
+            return;
+          }
+          do_proxy_out();
+        });
+    });
+}
+
 Bind::Bind(Config &config) : Object(config) {
   LOG_MSG("bind remote", config.client_remote);
   for (int i = 0; i + 1 < config.binds.size(); i += 2)
-    std::make_shared<BindSession>(config.binds[i], config.binds[i + 1],
-                                  asio::ip::tcp::socket(config.io_context), *this)
-      ->bind();
+    std::make_shared<BindSession>(config.binds[i], config.binds[i + 1], *this)->bind();
 }

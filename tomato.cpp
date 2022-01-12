@@ -1,5 +1,7 @@
 #include "tomato.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -97,7 +99,8 @@ void Object::log(int level, std::string msg, asio::ip::tcp::endpoint endpoint) {
   log(level, msg + " @ " + oss.str());
 }
 
-void Object::log(int level, std::string msg, asio::ip::tcp::endpoint local, asio::ip::tcp::endpoint remote) {
+void Object::log(int level, std::string msg, asio::ip::tcp::endpoint local,
+                 asio::ip::tcp::endpoint remote) {
   std::ostringstream oss;
   oss << local << " -> " << remote;
   log(level, msg + " @ " + oss.str());
