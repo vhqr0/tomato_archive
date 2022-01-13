@@ -10,7 +10,7 @@
 UBindSession::UBindSession(asio::ip::udp::endpoint &local, asio::ip::udp::endpoint &remote,
                            Object &object)
   : Object(object), socket_(config.io_context, local),
-    stream_(config.io_context, config.client_ssl_context), local_(local), remote_(remote) {}
+    stream_(config.io_context, config.ssl_context), local_(local), remote_(remote) {}
 
 UBindSession::~UBindSession() { LOG_MSG("sesion closed"); }
 
@@ -59,7 +59,7 @@ void UBindSession::start() {
       std::memcpy(&out_buf_[length_], &in_buf_[0], length);
       length_ += length;
       stream_.lowest_layer().async_connect( // connect
-        config.client_remote, [this, self](asio::error_code ec) {
+        config.remote, [this, self](asio::error_code ec) {
           if (ec) {
             LOG_ERR("connect failed", ec);
             return;

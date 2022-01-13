@@ -3,34 +3,40 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include <asio.hpp>
 #include <asio/ssl.hpp>
 
 #include <openssl/md5.h>
 
-Config::Config()
-  : client_ssl_context(asio::ssl::context::sslv23), server_ssl_context(asio::ssl::context::sslv23) {
+Config::Config() : ssl_context(asio::ssl::context::sslv23) {
+  ssl_context.set_verify_mode(asio::ssl::verify_peer);
   std::string pwd = env_string("TOMATO_PASSWORD", "password");
   MD5((const unsigned char *)pwd.c_str(), pwd.length(), password);
-  client_local = env_endpoint("TOMATO_CLIENT_LOCAL", 1080);
-  client_remote = env_endpoint("TOMATO_CLIENT_REMOTE", 4433);
-  server_local = env_endpoint("TOMATO_SERVER_LOCAL", 4433);
+}
+
+void Config::setup_client() {
+  local = env_endpoint("TOMATO_CLIENT_LOCAL", 1080);
+  remote = env_endpoint("TOMATO_CLIENT_REMOTE", 4433);
+  ssl_context.load_verify_file(env_string("TOMATO_CA", "crt/ca.crt"));
+}
+
+void Config::setup_server() {
+  local = env_endpoint("TOMATO_SERVER_LOCAL", 4433);
   server_index =
     "HTTP/1.1 200 OK\r\n\r\n" + env_string("TOMATO_SERVER_INDEX", "<p>hello world</p>");
-  client_ssl_context.set_verify_mode(asio::ssl::verify_peer);
-  client_ssl_context.load_verify_file(env_string("TOMATO_CA", "crt/ca.crt"));
-  server_ssl_context.set_verify_mode(asio::ssl::verify_peer);
-  server_ssl_context.use_certificate_file(env_string("TOMATO_CERT", "crt/server.crt"),
-                                          asio::ssl::context::pem);
-  server_ssl_context.use_private_key_file(env_string("TOMATO_KEY", "crt/server.key"),
-                                          asio::ssl::context::pem);
+  ssl_context.use_certificate_file(env_string("TOMATO_CERT", "crt/server.crt"),
+                                   asio::ssl::context::pem);
+  ssl_context.use_private_key_file(env_string("TOMATO_KEY", "crt/server.key"),
+                                   asio::ssl::context::pem);
 }
 
 std::string Config::env_string(const char *env, std::string dft) {
@@ -83,8 +89,8 @@ std::pair<asio::ip::address, uint16_t> Config::resolve(std::string host, uint16_
       length += 21;
       buf[length++] = port >> 8;
       buf[length++] = port;
-      asio::ssl::stream<asio::ip::tcp::socket> stream(io_context, client_ssl_context);
-      stream.lowest_layer().connect(client_remote);
+      asio::ssl::stream<asio::ip::tcp::socket> stream(io_context, ssl_context);
+      stream.lowest_layer().connect(remote);
       stream.handshake(stream.client);
       stream.write_some(asio::buffer(buf, length));
       length = stream.read_some(asio::buffer(buf));
@@ -126,7 +132,7 @@ std::pair<asio::ip::address, uint16_t> Config::resolve(std::string host, uint16_
 
 std::vector<std::string> Config::split_binds(std::string binds) {
   std::vector<std::string> sp;
-  for(;;) {
+  for (;;) {
     auto pos = binds.find(';');
     sp.push_back(binds.substr(0, pos));
     if (pos == std::string::npos)
@@ -213,16 +219,20 @@ int main(int argc, char **argv) {
     return -1;
   }
   if (!std::strcmp(argv[1], "-c")) {
+    config.setup_client();
     Client client(config);
     config.io_context.run();
   } else if (!std::strcmp(argv[1], "-s")) {
+    config.setup_server();
     Server server(config);
     config.io_context.run();
   } else if (!std::strcmp(argv[1], "-b")) {
+    config.setup_client();
     config.resolve_binds();
     Bind bind(config);
     config.io_context.run();
   } else if (!std::strcmp(argv[1], "-u")) {
+    config.setup_client();
     config.resolve_ubinds();
     UBind ubind(config);
     config.io_context.run();

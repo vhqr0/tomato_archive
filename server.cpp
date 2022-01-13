@@ -10,7 +10,7 @@
 
 ServerSession::ServerSession(asio::ip::tcp::socket socket, Object &object)
   : Object(object), socket_(config.io_context), usocket_(config.io_context),
-    acceptor_(config.io_context), stream_(std::move(socket), config.server_ssl_context),
+    acceptor_(config.io_context), stream_(std::move(socket), config.ssl_context),
     resolver_(config.io_context), uresolver_(config.io_context) {}
 
 ServerSession::~ServerSession() { LOG_MSG("session closed"); }
@@ -426,8 +426,8 @@ int ServerSession::make_response(asio::ip::udp::endpoint endpoint) {
   return make_response(endpoint.address(), endpoint.port());
 }
 
-Server::Server(Config &config) : Object(config), acceptor_(config.io_context, config.server_local) {
-  LOG_MSG("server", config.server_local);
+Server::Server(Config &config) : Object(config), acceptor_(config.io_context, config.local) {
+  LOG_MSG("server", config.local);
   do_accept();
 }
 

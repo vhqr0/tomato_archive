@@ -9,8 +9,8 @@
 
 BindSession::BindSession(asio::ip::tcp::endpoint &local, asio::ip::tcp::endpoint &remote,
                          Object &object)
-  : Object(object), socket_(config.io_context),
-    stream_(config.io_context, config.client_ssl_context), local_(local), remote_(remote) {}
+  : Object(object), socket_(config.io_context), stream_(config.io_context, config.ssl_context),
+    local_(local), remote_(remote) {}
 
 BindSession::~BindSession() { LOG_MSG("session closed"); }
 
@@ -42,7 +42,7 @@ void BindSession::start() {
   }
   auto self(shared_from_this());
   stream_.lowest_layer().async_connect( // connect
-    config.client_remote, [this, self](asio::error_code ec) {
+    config.remote, [this, self](asio::error_code ec) {
       if (ec) {
         LOG_ERR("connect failed", ec);
         return;
@@ -179,7 +179,7 @@ void BindSession::do_proxy_out() {
 }
 
 Bind::Bind(Config &config) : Object(config) {
-  LOG_MSG("bind", config.client_remote);
+  LOG_MSG("bind", config.remote);
   for (auto &bind : config.binds)
     std::make_shared<BindSession>(bind.first, bind.second, *this)->start();
 }

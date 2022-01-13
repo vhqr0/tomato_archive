@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
@@ -29,14 +30,16 @@
 class Config {
 public:
   asio::io_context io_context;
+  asio::ssl::context ssl_context;
   uint8_t password[16];
-  asio::ssl::context client_ssl_context, server_ssl_context;
-  asio::ip::tcp::endpoint client_local, client_remote, server_local;
+  asio::ip::tcp::endpoint local, remote;
   std::string server_index;
   std::vector<std::pair<asio::ip::tcp::endpoint, asio::ip::tcp::endpoint>> binds;
   std::vector<std::pair<asio::ip::udp::endpoint, asio::ip::udp::endpoint>> ubinds;
 
   Config();
+  void setup_client();
+  void setup_server();
   void resolve_binds();
   void resolve_ubinds();
 

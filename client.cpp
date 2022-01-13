@@ -11,8 +11,7 @@
 #include <asio.hpp>
 
 ClientSession::ClientSession(asio::ip::tcp::socket socket, Object &object)
-  : Object(object), socket_(std::move(socket)),
-    stream_(config.io_context, config.client_ssl_context) {}
+  : Object(object), socket_(std::move(socket)), stream_(config.io_context, config.ssl_context) {}
 
 ClientSession::~ClientSession() { LOG_MSG("session closed"); }
 
@@ -48,7 +47,7 @@ void ClientSession::do_handshake() {
             return;
           }
           stream_.lowest_layer().async_connect( // connect
-            config.client_remote, [this, self](asio::error_code ec) {
+            config.remote, [this, self](asio::error_code ec) {
               if (ec) {
                 LOG_ERR("tomato handshake connect failed", ec);
                 return;
@@ -135,7 +134,7 @@ void ClientSession::do_http_handshake() {
   }
   auto self(shared_from_this());
   stream_.lowest_layer().async_connect( // connect
-    config.client_remote, [this, self](asio::error_code ec) {
+    config.remote, [this, self](asio::error_code ec) {
       if (ec) {
         LOG_ERR("http tomato handshake connect failed", ec);
         return;
@@ -245,8 +244,8 @@ void ClientSession::do_proxy_out() {
     });
 }
 
-Client::Client(Config &config) : Object(config), acceptor_(config.io_context, config.client_local) {
-  LOG_MSG("client", config.client_local, config.client_remote);
+Client::Client(Config &config) : Object(config), acceptor_(config.io_context, config.local) {
+  LOG_MSG("client", config.local, config.remote);
   do_accept();
 }
 
