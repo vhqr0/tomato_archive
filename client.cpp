@@ -3,7 +3,6 @@
 #include <stdint.h>
 
 #include <algorithm>
-#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <memory>
@@ -13,8 +12,7 @@
 
 ClientSession::ClientSession(asio::ip::tcp::socket socket, Object &object)
   : Object(object), socket_(std::move(socket)),
-    stream_(config.io_context, config.client_ssl_context), in_buf_(config.buf_size),
-    out_buf_(config.buf_size) {}
+    stream_(config.io_context, config.client_ssl_context) {}
 
 ClientSession::~ClientSession() { LOG_MSG("session closed"); }
 
@@ -111,7 +109,7 @@ void ClientSession::do_http_handshake() {
       host = host.substr(0, pos);
     }
     int length = host.length();
-    if (length + 23 + (connectp_ ? 0 : length_) > config.buf_size) {
+    if (length + 23 + (connectp_ ? 0 : length_) > TOMATO_BUF_SIZE) {
       LOG_ERR("http handshake receive host too long");
       return;
     }

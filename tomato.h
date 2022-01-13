@@ -11,34 +11,40 @@
 #include <asio/ssl.hpp>
 
 #ifdef TOMATO_NOLOG
-#define LOG_ERR(...) ;
-#define LOG_MSG(...) ;
+#define LOG_ERR(...)                                                                               \
+  { ; }
+#define LOG_MSG(...)                                                                               \
+  { ; }
 #else
-#define LOG_ERR(...) log(2, __VA_ARGS__);
-#define LOG_MSG(...) log(1, __VA_ARGS__);
+#define LOG_ERR(...)                                                                               \
+  { log('E', __VA_ARGS__); }
+#define LOG_MSG(...)                                                                               \
+  { log('M', __VA_ARGS__); }
+#endif
+
+#ifndef TOMATO_BUF_SIZE
+#define TOMATO_BUF_SIZE 4096
 #endif
 
 class Config {
 public:
   asio::io_context io_context;
-  int log_level, buf_size;
   uint8_t password[16];
   asio::ssl::context client_ssl_context, server_ssl_context;
   asio::ip::tcp::endpoint client_local, client_remote, server_local;
   std::string server_index;
-  std::vector<asio::ip::tcp::endpoint> binds;
-  std::vector<asio::ip::udp::endpoint> ubinds;
+  std::vector<std::pair<asio::ip::tcp::endpoint, asio::ip::tcp::endpoint>> binds;
+  std::vector<std::pair<asio::ip::udp::endpoint, asio::ip::udp::endpoint>> ubinds;
 
   Config();
+  void resolve_binds();
+  void resolve_ubinds();
 
 private:
-  static int parse_int(const char *env, int dft);
-  static std::string parse_str(const char *env, std::string dft);
-  static asio::ip::tcp::endpoint parse_endpoint(const char *env, std::string port);
-  static asio::ip::udp::endpoint parse_uendpoint(const char *env, std::string port);
-
-  void parse_binds();
-  void parse_ubinds();
+  static std::string env_string(const char *env, std::string dft);
+  asio::ip::tcp::endpoint env_endpoint(const char *env, uint16_t port);
+  std::pair<asio::ip::address, uint16_t> resolve(std::string host, uint16_t port, bool remotep);
+  static std::vector<std::string> split_binds(std::string binds);
 };
 
 class Object {
@@ -50,13 +56,13 @@ protected:
   Config &config;
   int id;
 
-  void log(int level, std::string msg);
-  void log(int level, std::string msg, asio::error_code ec);
-  void log(int level, std::string msg, asio::ip::tcp::endpoint endpoint);
-  void log(int level, std::string msg, asio::ip::udp::endpoint endpoint);
-  void log(int level, std::string msg, asio::ip::tcp::endpoint local,
+  void log(char level, std::string msg);
+  void log(char level, std::string msg, asio::error_code ec);
+  void log(char level, std::string msg, asio::ip::tcp::endpoint endpoint);
+  void log(char level, std::string msg, asio::ip::udp::endpoint endpoint);
+  void log(char level, std::string msg, asio::ip::tcp::endpoint local,
            asio::ip::tcp::endpoint remote);
-  void log(int level, std::string msg, asio::ip::udp::endpoint local,
+  void log(char level, std::string msg, asio::ip::udp::endpoint local,
            asio::ip::udp::endpoint remote);
 };
 
@@ -67,9 +73,9 @@ public:
   void start();
 
 private:
+  std::array<uint8_t, TOMATO_BUF_SIZE> in_buf_, out_buf_;
   asio::ip::tcp::socket socket_;
   asio::ssl::stream<asio::ip::tcp::socket> stream_;
-  std::vector<uint8_t> in_buf_, out_buf_;
   std::size_t length_;
   bool connectp_;
 
@@ -96,11 +102,11 @@ public:
   void start();
 
 private:
+  std::array<uint8_t, TOMATO_BUF_SIZE> in_buf_, out_buf_;
   asio::ip::tcp::socket socket_;
   asio::ip::udp::socket usocket_;
   asio::ip::tcp::acceptor acceptor_;
   asio::ssl::stream<asio::ip::tcp::socket> stream_;
-  std::vector<uint8_t> in_buf_, out_buf_;
   asio::ip::tcp::endpoint endpoint_;
   asio::ip::udp::endpoint uendpoint_;
   asio::ip::tcp::resolver resolver_;
@@ -136,9 +142,9 @@ public:
   void start();
 
 private:
+  std::array<uint8_t, TOMATO_BUF_SIZE> in_buf_, out_buf_;
   asio::ip::tcp::socket socket_;
   asio::ssl::stream<asio::ip::tcp::socket> stream_;
-  std::vector<uint8_t> in_buf_, out_buf_;
   std::size_t length_;
   asio::ip::tcp::endpoint &local_, &remote_;
 
@@ -158,9 +164,9 @@ public:
   void start();
 
 private:
+  std::array<uint8_t, TOMATO_BUF_SIZE> in_buf_, out_buf_;
   asio::ip::udp::socket socket_;
   asio::ssl::stream<asio::ip::tcp::socket> stream_;
-  std::vector<uint8_t> in_buf_, out_buf_;
   std::size_t length_;
   asio::ip::udp::endpoint endpoint_, &local_, &remote_;
 

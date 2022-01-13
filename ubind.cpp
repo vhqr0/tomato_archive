@@ -2,8 +2,6 @@
 
 #include <stdint.h>
 
-#include <algorithm>
-#include <cstdlib>
 #include <cstring>
 #include <memory>
 
@@ -12,8 +10,7 @@
 UBindSession::UBindSession(asio::ip::udp::endpoint &local, asio::ip::udp::endpoint &remote,
                            Object &object)
   : Object(object), socket_(config.io_context, local),
-    stream_(config.io_context, config.client_ssl_context), in_buf_(config.buf_size),
-    out_buf_(config.buf_size), local_(local), remote_(remote) {}
+    stream_(config.io_context, config.client_ssl_context), local_(local), remote_(remote) {}
 
 UBindSession::~UBindSession() { LOG_MSG("sesion closed"); }
 
@@ -53,7 +50,7 @@ void UBindSession::start() {
         return;
       }
       LOG_MSG("receive", endpoint_);
-      if (length_ + length + 2 > config.buf_size) {
+      if (length_ + length + 2 > TOMATO_BUF_SIZE) {
         LOG_ERR("packet too long");
         return;
       }
@@ -128,7 +125,7 @@ void UBindSession::start() {
 void UBindSession::do_proxy_in() {
   auto self(shared_from_this());
   socket_.async_receive_from( // receive
-    asio::buffer(&in_buf_[2], config.buf_size - 2), endpoint_,
+    asio::buffer(&in_buf_[2], TOMATO_BUF_SIZE - 2), endpoint_,
     [this, self](asio::error_code ec, std::size_t length) {
       if (ec) {
         socket_.close();
@@ -160,7 +157,7 @@ void UBindSession::do_proxy_out() {
         return;
       }
       length = (out_buf_[0] << 8) + out_buf_[1];
-      if (length > config.buf_size) {
+      if (length > TOMATO_BUF_SIZE) {
         socket_.close();
         stream_.lowest_layer().close();
         return;
@@ -188,6 +185,6 @@ void UBindSession::do_proxy_out() {
 }
 
 UBind::UBind(Config &config) : Object(config) {
-  for (int i = 0; i + 1 < config.ubinds.size(); i += 2)
-    std::make_shared<UBindSession>(config.ubinds[i], config.ubinds[i + 1], *this)->start();
+  for (auto &ubind : config.ubinds)
+    std::make_shared<UBindSession>(ubind.first, ubind.second, *this)->start();
 }

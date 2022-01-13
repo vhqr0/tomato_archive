@@ -2,8 +2,6 @@
 
 #include <stdint.h>
 
-#include <algorithm>
-#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -13,8 +11,7 @@
 ServerSession::ServerSession(asio::ip::tcp::socket socket, Object &object)
   : Object(object), socket_(config.io_context), usocket_(config.io_context),
     acceptor_(config.io_context), stream_(std::move(socket), config.server_ssl_context),
-    resolver_(config.io_context), uresolver_(config.io_context), in_buf_(config.buf_size),
-    out_buf_(config.buf_size) {}
+    resolver_(config.io_context), uresolver_(config.io_context) {}
 
 ServerSession::~ServerSession() { LOG_MSG("session closed"); }
 
@@ -247,6 +244,21 @@ void ServerSession::do_execute() {
         });
     }
     break;
+  case 0x80:
+    LOG_MSG("host query", uendpoint_);
+    {
+      int length = make_response(uendpoint_);
+      if (length < 0)
+        return;
+      stream_.async_write_some( // send response
+        asio::buffer(in_buf_, length), [this, self](asio::error_code ec, std::size_t length) {
+          if (ec) {
+            LOG_ERR("handshake send failed");
+            return;
+          }
+        });
+    }
+    break;
   case 0x81:
     LOG_MSG("udp assoc", uendpoint_);
     {
@@ -328,7 +340,7 @@ void ServerSession::do_udp_proxy_in() {
         return;
       }
       length = (in_buf_[0] << 8) + in_buf_[1];
-      if (length > config.buf_size) {
+      if (length > TOMATO_BUF_SIZE) {
         usocket_.close();
         stream_.lowest_layer().close();
         return;
@@ -358,7 +370,7 @@ void ServerSession::do_udp_proxy_in() {
 void ServerSession::do_udp_proxy_out() {
   auto self(shared_from_this());
   usocket_.async_receive_from( // receive
-    asio::buffer(&out_buf_[2], config.buf_size - 2), uendpoint_,
+    asio::buffer(&out_buf_[2], TOMATO_BUF_SIZE - 2), uendpoint_,
     [this, self](asio::error_code ec, std::size_t length) {
       if (ec) {
         usocket_.close();

@@ -2,8 +2,6 @@
 
 #include <stdint.h>
 
-#include <algorithm>
-#include <cstdlib>
 #include <cstring>
 #include <memory>
 
@@ -12,8 +10,7 @@
 BindSession::BindSession(asio::ip::tcp::endpoint &local, asio::ip::tcp::endpoint &remote,
                          Object &object)
   : Object(object), socket_(config.io_context),
-    stream_(config.io_context, config.client_ssl_context), in_buf_(config.buf_size),
-    out_buf_(config.buf_size), local_(local), remote_(remote) {}
+    stream_(config.io_context, config.client_ssl_context), local_(local), remote_(remote) {}
 
 BindSession::~BindSession() { LOG_MSG("session closed"); }
 
@@ -183,6 +180,6 @@ void BindSession::do_proxy_out() {
 
 Bind::Bind(Config &config) : Object(config) {
   LOG_MSG("bind", config.client_remote);
-  for (int i = 0; i + 1 < config.binds.size(); i += 2)
-    std::make_shared<BindSession>(config.binds[i], config.binds[i + 1], *this)->start();
+  for (auto &bind : config.binds)
+    std::make_shared<BindSession>(bind.first, bind.second, *this)->start();
 }
