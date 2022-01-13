@@ -75,6 +75,9 @@ void ClientSession::do_handshake() {
 }
 
 void ClientSession::do_http_handshake() {
+  static const char *div = "://";
+  std::string method, host;
+  uint16_t port = 80;
   try {
     auto beg = in_buf_.begin();
     auto end = beg + length_;
@@ -85,52 +88,60 @@ void ClientSession::do_http_handshake() {
     cur = std::find(beg, end, ' ');
     if (cur == end)
       throw std::exception();
-    std::string method((char *)&*beg, std::distance(beg, cur));
-    connectp_ = method == "CONNECT";
+    method = std::string((char *)&*beg, std::distance(beg, cur));
     beg = cur + 1;
     cur = std::find(beg, end, ' ');
     if (cur == end)
       throw std::exception();
     end = cur;
-    static const char *protodiv = "://";
-    cur = std::search(beg, end, protodiv, protodiv + 3);
+    cur = std::search(beg, end, div, div + 3);
     if (cur != end)
       beg = cur + 3;
     cur = std::find_if(beg, end, [](uint8_t x) { return x == '/' || x == '?' || x == '#'; });
-    std::string host((char *)&*beg, std::distance(beg, cur));
-    LOG_MSG("http handshake accept " + method + " " + host);
-    uint16_t port;
-    auto pos = host.find(':');
-    if (pos == std::string::npos) {
-      port = 80;
+    host = std::string((char *)&*beg, std::distance(beg, cur));
+    if (!host.empty() && host[0] == '[') {
+      auto pos = host.find(']');
+      if (pos == std::string::npos)
+        throw std::exception();
+      if (pos + 1 != std::string::npos) {
+        if (host[pos + 1] != ':')
+          throw std::exception();
+        port = std::stoi(host.substr(pos + 2));
+      }
+      host = host.substr(1, pos - 1);
     } else {
-      port = std::stoi(host.substr(pos + 1));
-      host = host.substr(0, pos);
-    }
-    int length = host.length();
-    if (length + 23 + (connectp_ ? 0 : length_) > TOMATO_BUF_SIZE) {
-      LOG_ERR("http handshake receive host too long");
-      return;
-    }
-    std::memcpy(&out_buf_[0], config.password, 16);
-    out_buf_[16] = 5;
-    out_buf_[17] = 1;
-    out_buf_[18] = 0;
-    out_buf_[19] = 3;
-    out_buf_[20] = length;
-    std::memcpy(&out_buf_[21], &*beg, length);
-    length += 21;
-    out_buf_[length++] = port >> 8;
-    out_buf_[length++] = port;
-    if (connectp_) {
-      length_ = length;
-    } else {
-      std::memcpy(&out_buf_[length], &in_buf_[0], length_);
-      length_ += length;
+      auto pos = host.find(':');
+      if (pos != std::string::npos) {
+        port = std::stoi(host.substr(pos + 1));
+        host = host.substr(0, pos);
+      }
     }
   } catch (std::exception e) {
     LOG_ERR("http handshake invalid data");
     return;
+  }
+  LOG_MSG("http handshake accept " + method + " " + host + ":" + std::to_string(port));
+  int length = host.length();
+  connectp_ = method == "CONNECT";
+  if (length + 23 + (connectp_ ? 0 : length_) > TOMATO_BUF_SIZE) {
+    LOG_ERR("http handshake receive host too long");
+    return;
+  }
+  std::memcpy(&out_buf_[0], config.password, 16);
+  out_buf_[16] = 5;
+  out_buf_[17] = 1;
+  out_buf_[18] = 0;
+  out_buf_[19] = 3;
+  out_buf_[20] = length;
+  std::memcpy(&out_buf_[21], host.c_str(), length);
+  length += 21;
+  out_buf_[length++] = port >> 8;
+  out_buf_[length++] = port;
+  if (connectp_) {
+    length_ = length;
+  } else {
+    std::memcpy(&out_buf_[length], &in_buf_[0], length_);
+    length_ += length;
   }
   auto self(shared_from_this());
   stream_.lowest_layer().async_connect( // connect
