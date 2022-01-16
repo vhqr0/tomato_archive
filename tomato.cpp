@@ -1,6 +1,7 @@
 #include "tomato.h"
 
 #include <stdint.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <array>
@@ -214,29 +215,30 @@ void Object::log(char level, std::string msg, asio::ip::udp::endpoint local,
 
 int main(int argc, char **argv) {
   Config config;
-  if (argc < 2) {
-    std::cerr << "wrong argument" << std::endl;
-    return -1;
-  }
-  if (!std::strcmp(argv[1], "-c")) {
+  switch (getopt(argc, argv, "csbu")) {
+  case 'c': {
     config.setup_client();
     Client client(config);
     config.io_context.run();
-  } else if (!std::strcmp(argv[1], "-s")) {
+  } break;
+  case 's': {
     config.setup_server();
     Server server(config);
     config.io_context.run();
-  } else if (!std::strcmp(argv[1], "-b")) {
+  } break;
+  case 'b': {
     config.setup_client();
     config.resolve_binds();
     Bind bind(config);
     config.io_context.run();
-  } else if (!std::strcmp(argv[1], "-u")) {
+  } break;
+  case 'u': {
     config.setup_client();
     config.resolve_ubinds();
     UBind ubind(config);
     config.io_context.run();
-  } else {
+  } break;
+  default:
     std::cerr << "wrong argument" << std::endl;
     return -1;
   }
