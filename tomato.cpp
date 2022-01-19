@@ -214,32 +214,74 @@ void Object::log(char level, std::string msg, asio::ip::udp::endpoint local,
 }
 
 int main(int argc, char **argv) {
+  char mode = -1;
+  char c;
+  while ((c = getopt(argc, argv, "csbuC:S:B:U:R:P")) >= 0) {
+    switch (c) {
+    case 'c':
+    case 's':
+    case 'b':
+    case 'u':
+      mode = c;
+      break;
+    case 'C':
+      mode = 'c';
+      setenv("TOMATO_CLIENT_LOCAL", optarg, true);
+      break;
+    case 'S':
+      mode = 's';
+      setenv("TOMATO_SERVER_LOCAL", optarg, true);
+      break;
+    case 'B':
+      mode = 'b';
+      setenv("TOMATO_BINDS", optarg, true);
+      break;
+    case 'U':
+      mode = 'u';
+      setenv("TOMATO_UBINDS", optarg, true);
+      break;
+    case 'R':
+      setenv("TOMATO_CLIENT_REMOTE", optarg, true);
+      break;
+    case 'P':
+      setenv("TOMATO_PASSWORD", optarg, true);
+      break;
+    defualt:
+      std::cerr << "wrong argument" << std::endl;
+      return -1;
+    }
+  }
   Config config;
-  switch (getopt(argc, argv, "csbu")) {
+  switch (mode) {
   case 'c': {
     config.setup_client();
     Client client(config);
     config.io_context.run();
-  } break;
+    break;
+  }
   case 's': {
     config.setup_server();
     Server server(config);
     config.io_context.run();
-  } break;
+    break;
+  }
   case 'b': {
     config.setup_client();
     config.resolve_binds();
     Bind bind(config);
     config.io_context.run();
-  } break;
+    break;
+  }
   case 'u': {
     config.setup_client();
     config.resolve_ubinds();
     UBind ubind(config);
     config.io_context.run();
-  } break;
+    break;
+  }
   default:
     std::cerr << "wrong argument" << std::endl;
     return -1;
   }
+  return 0;
 }
