@@ -1,7 +1,8 @@
 #include "tomato.h"
 
+#include <getopt.h> // getopt_long
 #include <stdint.h>
-#include <unistd.h>
+#include <stdlib.h> // setenv
 
 #include <algorithm>
 #include <array>
@@ -213,42 +214,85 @@ void Object::log(char level, std::string msg, asio::ip::udp::endpoint local,
   log(level, msg + " @ " + oss.str());
 }
 
+void help(bool invalid_argument_p) {
+  if (invalid_argument_p)
+    std::cerr << "invalid argument" << std::endl;
+  std::cout << "usage: tomato -[csbu[arg]] [-r remote] [-p password]" << std::endl;
+  std::cout << "-h, --help      show this message" << std::endl;
+  std::cout << "-c, --client    client mode" << std::endl;
+  std::cout << "-s, --server    server mode" << std::endl;
+  std::cout << "-b, --binds     bind mode" << std::endl;
+  std::cout << "-u, --ubinds    ubind mode" << std::endl;
+  std::cout << "-r, --remote    specified remote server" << std::endl;
+  std::cout << "-p, --password  specified password" << std::endl;
+  std::cout << "    --index     specified index page used by server" << std::endl;
+  std::cout << "    --ca        specified ca file used by client" << std::endl;
+  std::cout << "    --cert      specified cert file used by server" << std::endl;
+  std::cout << "    --key       specified key file used by server" << std::endl;
+  exit(invalid_argument_p ? -1 : 1);
+}
+
 int main(int argc, char **argv) {
-  char mode = -1;
-  char c;
-  while ((c = getopt(argc, argv, "csbuC:S:B:U:R:P")) >= 0) {
+  char c, mode = -1;
+  int lopt, loptind;
+  struct option loptions[] = {
+    {"help", no_argument, NULL, 'h'},           {"client", optional_argument, NULL, 'c'},
+    {"server", optional_argument, NULL, 's'},   {"binds", optional_argument, NULL, 'b'},
+    {"ubinds", optional_argument, NULL, 'u'},   {"remote", required_argument, NULL, 'r'},
+    {"password", required_argument, NULL, 'p'}, {"index", required_argument, &lopt, 0},
+    {"ca", required_argument, &lopt, 1},        {"cert", required_argument, &lopt, 2},
+    {"key", required_argument, &lopt, 3},       {0, 0, 0, 0}};
+  while ((c = getopt_long(argc, argv, "hc::s::b::u::r:p:", loptions, &loptind)) >= 0) {
     switch (c) {
+    case 'h':
+      help(false);
+      break;
     case 'c':
+      mode = c;
+      if (optarg)
+        setenv("TOMATO_CLIENT_LOCAL", optarg, true);
+      break;
     case 's':
+      mode = c;
+      if (optarg)
+        setenv("TOMATO_SERVER_LOCAL", optarg, true);
+      break;
     case 'b':
+      mode = c;
+      if (optarg)
+        setenv("TOMATO_BINDS", optarg, true);
+      break;
     case 'u':
       mode = c;
+      if (optarg)
+        setenv("TOMATO_UBINDS", optarg, true);
       break;
-    case 'C':
-      mode = 'c';
-      setenv("TOMATO_CLIENT_LOCAL", optarg, true);
-      break;
-    case 'S':
-      mode = 's';
-      setenv("TOMATO_SERVER_LOCAL", optarg, true);
-      break;
-    case 'B':
-      mode = 'b';
-      setenv("TOMATO_BINDS", optarg, true);
-      break;
-    case 'U':
-      mode = 'u';
-      setenv("TOMATO_UBINDS", optarg, true);
-      break;
-    case 'R':
+    case 'r':
       setenv("TOMATO_CLIENT_REMOTE", optarg, true);
       break;
-    case 'P':
+    case 'p':
       setenv("TOMATO_PASSWORD", optarg, true);
       break;
-    defualt:
-      std::cerr << "wrong argument" << std::endl;
-      return -1;
+    case 0:
+      switch (lopt) {
+      case 0:
+        setenv("TOMATO_SERVER_INDEX", optarg, true);
+        break;
+      case 1:
+        setenv("TOMATO_CA", optarg, true);
+        break;
+      case 2:
+        setenv("TOMATO_CERT", optarg, true);
+        break;
+      case 3:
+        setenv("TOMATO_KEY", optarg, true);
+        break;
+      default:
+        help(true);
+      }
+      break;
+    default:
+      help(true);
     }
   }
   Config config;
@@ -280,8 +324,7 @@ int main(int argc, char **argv) {
     break;
   }
   default:
-    std::cerr << "wrong argument" << std::endl;
-    return -1;
+    help(true);
   }
   return 0;
 }
